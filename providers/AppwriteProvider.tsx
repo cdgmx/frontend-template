@@ -23,6 +23,10 @@ interface AppwriteProviderProps {
 
 const requireClientEnv = (value: string | undefined, key: string): string => {
 	if (!value) {
+		if (typeof window === "undefined") {
+			// During SSR/build time, return a placeholder
+			return "";
+		}
 		throw new Error(`Missing environment variable: ${key}`);
 	}
 	return value;
@@ -42,13 +46,22 @@ const APPWRITE_BUCKET_ID = requireClientEnv(
 );
 
 export const AppwriteProvider = ({ children }: AppwriteProviderProps) => {
+	const isClientReady =
+		typeof window !== "undefined" &&
+		APPWRITE_ENDPOINT &&
+		APPWRITE_PROJECT_ID &&
+		APPWRITE_BUCKET_ID;
+
 	const client = useMemo(() => {
+		if (!isClientReady) return null;
 		return new Client()
 			.setEndpoint(APPWRITE_ENDPOINT)
 			.setProject(APPWRITE_PROJECT_ID);
-	}, []);
+	}, [isClientReady]);
 
 	const contextValue = useMemo(() => {
+		if (!client) return undefined;
+
 		const account = new Account(client);
 		const databases = new Databases(client);
 		const storage = new Storage(client);
@@ -61,6 +74,10 @@ export const AppwriteProvider = ({ children }: AppwriteProviderProps) => {
 
 		return { client, account, databases, storage, getFileView, uploadFile };
 	}, [client]);
+
+	if (!contextValue) {
+		return <>{children}</>;
+	}
 
 	return (
 		<AppwriteContext.Provider value={contextValue}>
